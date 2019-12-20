@@ -1,0 +1,12 @@
+[package]
+name = "wick-downloader"
+version = "0.1.0"
+authors = ["Waddlesworth <github@genj.io>"]
+edition = "2018"
+
+[lib]
+name = "wick_downloader"
+crate-type = ["cdylib"]
+
+[dependencies]
+tokio = { version = "0.2", features = ["full"] }

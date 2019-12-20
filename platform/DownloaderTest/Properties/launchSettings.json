@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "DownloaderTest": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "RUST_BACKTRACE": "full"
+      }
+    }
+  }
+}
