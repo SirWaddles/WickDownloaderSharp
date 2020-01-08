@@ -1,5 +1,5 @@
 use tokio::runtime;
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 use wickdl::{ServiceState, PakService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
@@ -57,7 +57,7 @@ pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
 }
 
 #[no_mangle]
-pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut Mutex<PakService>, err: u32)) {
+pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut PakService, err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -70,7 +70,7 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *co
     state.runtime.spawn(async move {
         match service.get_pak(file, key).await {
             Ok(pak) => {
-                cb(Box::into_raw(Box::new(Mutex::new(pak))), 0);
+                cb(Box::into_raw(Box::new(pak)), 0);
             },
             Err(err) => {
                 cb(std::ptr::null_mut(), err.get_code());
