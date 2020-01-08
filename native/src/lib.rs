@@ -1,5 +1,5 @@
 use tokio::runtime;
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 use wickdl::{ServiceState, PakService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
@@ -10,7 +10,7 @@ pub struct DownloaderState {
 }
 
 #[no_mangle]
-pub extern fn initialize(cb: extern fn(state: *mut DownloaderState)) {
+pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
     let rt = Arc::new(runtime::Builder::new()
         .enable_all()
         .threaded_scheduler()
@@ -20,11 +20,17 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState)) {
 
     let rt2 = Arc::clone(&rt);
     rt.spawn(async move {
-        let service = ServiceState::new().await.unwrap();
-        cb(Box::into_raw(Box::new(DownloaderState {
-            runtime: rt2,
-            service: Arc::new(service),
-        })));
+        match ServiceState::new().await {
+            Ok(service) => {
+                cb(Box::into_raw(Box::new(DownloaderState {
+                    runtime: rt2,
+                    service: Arc::new(service),
+                })), 0);
+            },
+            Err(err) => {
+                cb(std::ptr::null_mut(), err.get_code());
+            },
+        };
     });
 }
 
@@ -51,7 +57,7 @@ pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
 }
 
 #[no_mangle]
-pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut PakService)) {
+pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut Mutex<PakService>, err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -62,9 +68,26 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *co
     let service = Arc::clone(&state.service);
 
     state.runtime.spawn(async move {
-        let pak = service.get_pak(file, key).await.unwrap();
-        cb(Box::into_raw(Box::new(pak)));
+        match service.get_pak(file, key).await {
+            Ok(pak) => {
+                cb(Box::into_raw(Box::new(Mutex::new(pak))), 0);
+            },
+            Err(err) => {
+                cb(std::ptr::null_mut(), err.get_code());
+            },
+        };
     });
+}
+
+#[no_mangle]
+pub extern fn get_pak_mount(ptr: *mut PakService) -> *mut c_char {
+    let pak = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    let c_str = CString::new(pak.get_mount_point()).unwrap();
+    c_str.into_raw()
 }
 
 #[no_mangle]
@@ -81,7 +104,7 @@ pub extern fn get_file_names(ptr: *mut PakService) -> *mut VecStringHead {
 }
 
 #[no_mangle]
-pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService, rfile: *const c_char, cb: extern fn (data: *mut u8, length: u32)) {
+pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService, rfile: *const c_char, cb: extern fn (data: *mut u8, length: u32, err: u32)) {
     let state = unsafe {
         assert!(!rtptr.is_null());
         &mut *rtptr
@@ -93,8 +116,14 @@ pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService
     let file = get_string(rfile);
 
     state.runtime.spawn(async move {
-        let mut data = pak.get_data(&file).await.unwrap();
-        cb(data.as_mut_ptr(), data.len() as u32);
+        match pak.get_data(&file).await {
+            Ok(mut data) => {
+                cb(data.as_mut_ptr(), data.len() as u32, 0);
+            },
+            Err(err) => {
+                cb(std::ptr::null_mut(), 0, err.get_code());
+            },
+        };
     });
 }
 
