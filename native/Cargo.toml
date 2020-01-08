@@ -1,5 +1,5 @@
 [package]
-name = "wick-downloader"
+name = "wick-downloader-sharp"
 version = "0.1.0"
 authors = ["Waddlesworth <github@genj.io>"]
 edition = "2018"
@@ -10,3 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
+wickdl = { path = "D:\\GitHub\\WickDownloader" }
+libc = "0.2"

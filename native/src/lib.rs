@@ -1,38 +1,145 @@
 use tokio::runtime;
-use tokio::time;
+use std::sync::Arc;
+use wickdl::{ServiceState, PakService};
+use libc::{c_char};
+use std::ffi::{CStr, CString};
 
-#[no_mangle]
-pub extern fn initialize() -> *mut runtime::Runtime {
-    let rt = runtime::Builder::new()
-        .enable_time()
-        .threaded_scheduler()
-        .core_threads(4)
-        .on_thread_start(|| println!("Thread Started"))
-        .on_thread_stop(|| println!("Thread Stopped"))
-        .build()
-        .unwrap();
-
-    println!("Starting Runtime");
-    Box::into_raw(Box::new(rt))
+pub struct DownloaderState {
+    runtime: Arc<runtime::Runtime>,
+    service: Arc<ServiceState>,
 }
 
 #[no_mangle]
-pub extern fn destroy(ptr: *mut runtime::Runtime) {
-    println!("Stopping Runtime");
+pub extern fn initialize(cb: extern fn(state: *mut DownloaderState)) {
+    let rt = Arc::new(runtime::Builder::new()
+        .enable_all()
+        .threaded_scheduler()
+        .core_threads(4)
+        .build()
+        .unwrap());
+
+    let rt2 = Arc::clone(&rt);
+    rt.spawn(async move {
+        let service = ServiceState::new().await.unwrap();
+        cb(Box::into_raw(Box::new(DownloaderState {
+            runtime: rt2,
+            service: Arc::new(service),
+        })));
+    });
+}
+
+fn get_string(s: *const c_char) -> String {
+    let c_str = unsafe {
+        assert!(!s.is_null());
+        CStr::from_ptr(s)
+    };
+
+    c_str.to_str().unwrap().to_string()
+}
+
+#[no_mangle]
+pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
+    let state = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    Box::into_raw(Box::new(VecStringHead {
+        contents: state.service.get_paks(),
+        index: 0,
+    }))
+}
+
+#[no_mangle]
+pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut PakService)) {
+    let state = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+    let file = get_string(rfile);
+    let key = get_string(rkey);
+
+    let service = Arc::clone(&state.service);
+
+    state.runtime.spawn(async move {
+        let pak = service.get_pak(file, key).await.unwrap();
+        cb(Box::into_raw(Box::new(pak)));
+    });
+}
+
+#[no_mangle]
+pub extern fn get_file_names(ptr: *mut PakService) -> *mut VecStringHead {
+    let pak = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    Box::into_raw(Box::new(VecStringHead {
+        contents: pak.get_files(),
+        index: 0,
+    }))
+}
+
+#[no_mangle]
+pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService, rfile: *const c_char, cb: extern fn (data: *mut u8, length: u32)) {
+    let state = unsafe {
+        assert!(!rtptr.is_null());
+        &mut *rtptr
+    };
+    let pak = unsafe {
+        assert!(!pakptr.is_null());
+        &mut *pakptr
+    };
+    let file = get_string(rfile);
+
+    state.runtime.spawn(async move {
+        let mut data = pak.get_data(&file).await.unwrap();
+        cb(data.as_mut_ptr(), data.len() as u32);
+    });
+}
+
+#[no_mangle]
+pub extern fn destroy(ptr: *mut DownloaderState) {
+    if ptr.is_null() { return; }
+    unsafe { Box::from_raw(ptr); }
+}
+
+pub struct VecStringHead {
+    contents: Vec<String>,
+    index: usize,
+}
+
+#[no_mangle]
+pub extern fn vec_string_get_next(ptr: *mut VecStringHead) -> *mut c_char {
+    let container = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    let string = match container.contents.get(container.index) {
+        Some(data) => data,
+        None => return std::ptr::null_mut(),
+    };
+
+    container.index += 1;
+    let c_str = CString::new(string.to_owned()).unwrap();
+    c_str.into_raw()
+}
+
+#[no_mangle]
+pub extern fn free_pak(ptr: *mut PakService) {
     if ptr.is_null() { return; }
     unsafe { Box::from_raw(ptr); }
 }
 
 #[no_mangle]
-pub extern fn notify_me(rtptr: *mut runtime::Runtime, cb: extern fn(i: u32)) {
-    println!("Sending Notification");
-    let rt = unsafe {
-        assert!(!rtptr.is_null());
-        &mut *rtptr
-    };
+pub extern fn free_vec_string(ptr: *mut VecStringHead) {
+    if ptr.is_null() { return; }
+    unsafe { Box::from_raw(ptr); }
+}
 
-    rt.spawn(async move {
-        time::delay_for(time::Duration::new(5 ,0)).await;
-        cb(5);
-    });
+#[no_mangle]
+pub extern fn free_string(ptr: *mut c_char) {
+    if ptr.is_null() { return; }
+    unsafe { CString::from_raw(ptr); }
 }
