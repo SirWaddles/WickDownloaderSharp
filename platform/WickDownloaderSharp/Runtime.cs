@@ -8,9 +8,14 @@ namespace WickDownloaderSharp
 {
     public class WickException : Exception
     {
-        public WickException(uint code) : base(GetMessageCode(code))
+        public WickException(uint code, string message) : base(GetMessage(code, message))
         {
             
+        }
+
+        private static string GetMessage(uint code, string message)
+        {
+            return GetMessageCode(code) + ": " + message;
         }
 
         private static string GetMessageCode(uint code)
@@ -47,8 +52,8 @@ namespace WickDownloaderSharp
 
     public class WickInitException : WickException
     {
-        private RuntimeHandle rt;
-        internal WickInitException(uint code, RuntimeHandle handle) : base(code)
+        private Runtime rt;
+        internal WickInitException(uint code, string message, Runtime handle) : base(code, message)
         {
             rt = handle;
         }
@@ -83,6 +88,17 @@ namespace WickDownloaderSharp
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle vec_string_get_next(VecStringHandle handle);
+
+        [DllImport("wick_downloader.dll")]
+        internal static extern StringHandle get_last_error();
+
+        public static string GetLastError()
+        {
+            var handle = get_last_error();
+            var message = handle.AsString();
+            handle.Dispose();
+            return message;
+        }
 
         [DllImport("wick_downloader.dll")]
         internal static extern void free_pak(IntPtr handle);
@@ -231,12 +247,13 @@ namespace WickDownloaderSharp
             {
                 try
                 {
+                    var runtime = new Runtime(new RuntimeHandle(a));
                     if (err != 0)
                     {
-                        taskPlace.SetException(new WickInitException(err, new RuntimeHandle(a)));
+                        taskPlace.SetException(new WickInitException(err, RuntimeBindings.GetLastError(), runtime));
                         return;
                     }
-                    taskPlace.SetResult(new Runtime(new RuntimeHandle(a)));
+                    taskPlace.SetResult(runtime);
                 }
                 finally
                 {
@@ -261,7 +278,7 @@ namespace WickDownloaderSharp
                 {
                     if (err != 0)
                     {
-                        taskPlace.SetException(new WickException(err));
+                        taskPlace.SetException(new WickException(err, RuntimeBindings.GetLastError()));
                         return;
                     }
                     taskPlace.SetResult(new PakService(new PakHandle(a)));
@@ -289,7 +306,7 @@ namespace WickDownloaderSharp
                 {
                     if (err != 0)
                     {
-                        taskPlace.SetException(new WickException(err));
+                        taskPlace.SetException(new WickException(err, RuntimeBindings.GetLastError()));
                         return;
                     }
                     byte[] mdata = new byte[length];

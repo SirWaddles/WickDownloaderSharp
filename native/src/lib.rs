@@ -1,12 +1,18 @@
 use tokio::runtime;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wickdl::{ServiceState, PakService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
+#[macro_use]
+extern crate lazy_static;
 
 pub struct DownloaderState {
     runtime: Arc<runtime::Runtime>,
     service: Option<Arc<ServiceState>>,
+}
+
+lazy_static! {
+    static ref LAST_ERROR: Mutex<String> = Mutex::new("No Error".to_owned());
 }
 
 #[no_mangle]
@@ -19,27 +25,34 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
         .unwrap());
 
     let rt2 = Arc::clone(&rt);
-    println!("Spawning Runtime");
     rt.spawn(async move {
         match ServiceState::new().await {
             Ok(service) => {
-                println!("Runtime Callback");
                 cb(Box::into_raw(Box::new(DownloaderState {
                     runtime: rt2,
                     service: Some(Arc::new(service)),
                 })), 0);
-                println!("Runtime Callback Returned");
             },
             Err(err) => {
-                println!("Runtime Callback Error");
+                set_last_error(format!("{}", err));
                 cb(Box::into_raw(Box::new(DownloaderState {
                     runtime: rt2,
                     service: None,
                 })), err.get_code());
-                println!("Runtime Callback Error Returned");
             },
         };
     });
+}
+
+fn set_last_error(err: String) {
+    let mut lock = LAST_ERROR.lock().unwrap();
+    *lock = err;
+}
+
+#[no_mangle]
+pub extern fn get_last_error() -> *mut c_char {
+    let c_str = CString::new((*LAST_ERROR.lock().unwrap()).clone()).unwrap();
+    c_str.into_raw()
 }
 
 fn get_string(s: *const c_char) -> String {
@@ -86,18 +99,14 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *co
         },
     };
 
-    println!("Spawning Pak Data");
     state.runtime.spawn(async move {
         match service.get_pak(file, key).await {
             Ok(pak) => {
-                println!("Pak Callback");
                 cb(Box::into_raw(Box::new(pak)), 0);
-                println!("Pak Callback Returned");
             },
             Err(err) => {
-                println!("Pak Callback Error");
+                set_last_error(format!("{}", err));
                 cb(std::ptr::null_mut(), err.get_code());
-                println!("Pak Callback Error Returned");
             },
         };
     });
@@ -139,18 +148,14 @@ pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService
     };
     let file = get_string(rfile);
 
-    println!("Spawning File Data");
     state.runtime.spawn(async move {
         match pak.get_data(&file).await {
             Ok(mut data) => {
-                println!("Pak Data Callback");
                 cb(data.as_mut_ptr(), data.len() as u32, 0);
-                println!("Pak Data Callback Returned");
             },
             Err(err) => {
-                println!("Pak Data Callback Error");
+                set_last_error(format!("{}", err));
                 cb(std::ptr::null_mut(), 0, err.get_code());
-                println!("Pak Data Callback Error Returned");
             },
         };
     });

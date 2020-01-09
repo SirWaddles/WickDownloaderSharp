@@ -1380,6 +1380,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "wick-downloader-sharp"
 version = "0.1.0"
 dependencies = [
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "wickdl 0.1.0",
