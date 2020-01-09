@@ -45,6 +45,15 @@ namespace WickDownloaderSharp
         }
     }
 
+    public class WickInitException : WickException
+    {
+        private RuntimeHandle rt;
+        internal WickInitException(uint code, RuntimeHandle handle) : base(code)
+        {
+            rt = handle;
+        }
+    }
+
     internal class RuntimeBindings
     {
         public delegate void InitializeDelegate(IntPtr a, uint err);
@@ -224,7 +233,7 @@ namespace WickDownloaderSharp
                 {
                     if (err != 0)
                     {
-                        taskPlace.SetException(new WickException(err));
+                        taskPlace.SetException(new WickInitException(err, new RuntimeHandle(a)));
                         return;
                     }
                     taskPlace.SetResult(new Runtime(new RuntimeHandle(a)));

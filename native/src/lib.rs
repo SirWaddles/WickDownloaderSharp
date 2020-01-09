@@ -6,7 +6,7 @@ use std::ffi::{CStr, CString};
 
 pub struct DownloaderState {
     runtime: Arc<runtime::Runtime>,
-    service: Arc<ServiceState>,
+    service: Option<Arc<ServiceState>>,
 }
 
 #[no_mangle]
@@ -19,16 +19,24 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
         .unwrap());
 
     let rt2 = Arc::clone(&rt);
+    println!("Spawning Runtime");
     rt.spawn(async move {
         match ServiceState::new().await {
             Ok(service) => {
+                println!("Runtime Callback");
                 cb(Box::into_raw(Box::new(DownloaderState {
                     runtime: rt2,
-                    service: Arc::new(service),
+                    service: Some(Arc::new(service)),
                 })), 0);
+                println!("Runtime Callback Returned");
             },
             Err(err) => {
-                cb(std::ptr::null_mut(), err.get_code());
+                println!("Runtime Callback Error");
+                cb(Box::into_raw(Box::new(DownloaderState {
+                    runtime: rt2,
+                    service: None,
+                })), err.get_code());
+                println!("Runtime Callback Error Returned");
             },
         };
     });
@@ -47,11 +55,16 @@ fn get_string(s: *const c_char) -> String {
 pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
     let state = unsafe {
         assert!(!ptr.is_null());
-        &mut *ptr
+        &*ptr
+    };
+
+    let service = match &state.service {
+        Some(data) => data,
+        None => return std::ptr::null_mut(),
     };
 
     Box::into_raw(Box::new(VecStringHead {
-        contents: state.service.get_paks(),
+        contents: service.get_paks(),
         index: 0,
     }))
 }
@@ -60,20 +73,31 @@ pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
 pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut PakService, err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
-        &mut *ptr
+        &*ptr
     };
     let file = get_string(rfile);
     let key = get_string(rkey);
 
-    let service = Arc::clone(&state.service);
+    let service = match &state.service {
+        Some(data) => Arc::clone(&data),
+        None => {
+            cb(std::ptr::null_mut(), 13);
+            return;
+        },
+    };
 
+    println!("Spawning Pak Data");
     state.runtime.spawn(async move {
         match service.get_pak(file, key).await {
             Ok(pak) => {
+                println!("Pak Callback");
                 cb(Box::into_raw(Box::new(pak)), 0);
+                println!("Pak Callback Returned");
             },
             Err(err) => {
+                println!("Pak Callback Error");
                 cb(std::ptr::null_mut(), err.get_code());
+                println!("Pak Callback Error Returned");
             },
         };
     });
@@ -115,13 +139,18 @@ pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService
     };
     let file = get_string(rfile);
 
+    println!("Spawning File Data");
     state.runtime.spawn(async move {
         match pak.get_data(&file).await {
             Ok(mut data) => {
+                println!("Pak Data Callback");
                 cb(data.as_mut_ptr(), data.len() as u32, 0);
+                println!("Pak Data Callback Returned");
             },
             Err(err) => {
+                println!("Pak Data Callback Error");
                 cb(std::ptr::null_mut(), 0, err.get_code());
+                println!("Pak Data Callback Error Returned");
             },
         };
     });
