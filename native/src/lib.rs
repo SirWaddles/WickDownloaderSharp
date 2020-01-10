@@ -30,7 +30,7 @@ impl<'a> HexSlice<'a> {
 impl<'a> fmt::Display for HexSlice<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for byte in self.0 {
-            write!(f, "{:02X} ", byte)?;
+            write!(f, "{:02X}", byte)?;
         }
         Ok(())
     }
@@ -159,35 +159,37 @@ pub extern fn get_file_names(ptr: *mut PakService) -> *mut VecStringHead {
 
 #[repr(C)]
 pub struct FileDataReturn {
-    content: *mut c_char,
-    err: u32,
+    pub content: *mut c_char,
+    pub err: u32,
 }
 
 #[no_mangle]
-pub extern fn get_file_hash(ptr: *mut PakService, rfile: *const c_char) -> FileDataReturn {
+pub extern fn get_file_hash(ptr: *mut PakService, rfile: *const c_char, rdata: *mut FileDataReturn) {
     let pak = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    let file = get_string(rfile);
 
+    let data = unsafe {
+        assert!(!rdata.is_null());
+        &mut *rdata
+    };
+    let file = get_string(rfile);
+    
     let hash = match pak.get_hash(&file) {
         Ok(data) => data,
         Err(err) => {
             set_last_error(format!("{}", err));
-            return FileDataReturn {
-                content: std::ptr::null_mut(),
-                err: err.get_code(),
-            };
+            data.content = std::ptr::null_mut();
+            data.err = err.get_code();
+            return;
         }
     };
 
     let hash_str = format!("{}", HexSlice::new(&hash));
     let c_str = CString::new(hash_str).unwrap();
-    FileDataReturn {
-        content: c_str.into_raw(),
-        err: 0,
-    }
+    data.content = c_str.into_raw();
+    data.err = 0;
 }
 
 #[no_mangle]

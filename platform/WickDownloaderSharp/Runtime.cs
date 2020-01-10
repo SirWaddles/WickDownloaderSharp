@@ -62,7 +62,7 @@ namespace WickDownloaderSharp
     [StructLayout(LayoutKind.Sequential)]
     internal class FileDataReturn
     {
-        public StringHandle hash;
+        public IntPtr hash;
         public uint error;
     }
 
@@ -94,7 +94,7 @@ namespace WickDownloaderSharp
         internal static extern void get_file_data(RuntimeHandle handle, PakHandle phandle, string file, DataRetrieveDelegate cb);
 
         [DllImport("wick_downloader.dll")]
-        internal static extern FileDataReturn get_file_hash(PakHandle phandle, string file);
+        internal static extern void get_file_hash(PakHandle handle, string file, FileDataReturn result);
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle vec_string_get_next(VecStringHandle handle);
@@ -174,10 +174,16 @@ namespace WickDownloaderSharp
     internal class StringHandle : SafeHandle
     {
         public StringHandle() : base(IntPtr.Zero, true) { }
+        public StringHandle(IntPtr ptr) : base (IntPtr.Zero, true)
+        {
+            handle = ptr;
+        }
+
         public override bool IsInvalid
         {
             get { return handle == IntPtr.Zero; }
         }
+
         protected override bool ReleaseHandle()
         {
             RuntimeBindings.free_string(handle);
@@ -229,13 +235,16 @@ namespace WickDownloaderSharp
 
         public string GetFileHash(string file)
         {
-            var fileData = RuntimeBindings.get_file_hash(handle, file);
+            var fileData = new FileDataReturn();
+            RuntimeBindings.get_file_hash(handle, file, fileData);
             if (fileData.error != 0)
             {
+                Console.WriteLine(fileData.error);
                 throw new WickException(fileData.error, RuntimeBindings.GetLastError());
             }
-            var hash = fileData.hash.AsString();
-            fileData.hash.Dispose();
+            var hashHandle = new StringHandle(fileData.hash);
+            var hash = hashHandle.AsString();
+            hashHandle.Dispose();
 
             return hash;
         }
