@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use wickdl::{ServiceState, PakService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
+use std::fmt;
 #[macro_use]
 extern crate lazy_static;
 
@@ -13,6 +14,26 @@ pub struct DownloaderState {
 
 lazy_static! {
     static ref LAST_ERROR: Mutex<String> = Mutex::new("No Error".to_owned());
+}
+
+// https://stackoverflow.com/a/27650405/3479580
+struct HexSlice<'a>(&'a [u8]);
+
+impl<'a> HexSlice<'a> {
+    fn new<T>(data: &'a T) -> HexSlice<'a> 
+        where T: ?Sized + AsRef<[u8]> + 'a
+    {
+        HexSlice(data.as_ref())
+    }
+}
+
+impl<'a> fmt::Display for HexSlice<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.0 {
+            write!(f, "{:02X} ", byte)?;
+        }
+        Ok(())
+    }
 }
 
 #[no_mangle]
@@ -134,6 +155,39 @@ pub extern fn get_file_names(ptr: *mut PakService) -> *mut VecStringHead {
         contents: pak.get_files(),
         index: 0,
     }))
+}
+
+#[repr(C)]
+pub struct FileDataReturn {
+    content: *mut c_char,
+    err: u32,
+}
+
+#[no_mangle]
+pub extern fn get_file_hash(ptr: *mut PakService, rfile: *const c_char) -> FileDataReturn {
+    let pak = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+    let file = get_string(rfile);
+
+    let hash = match pak.get_hash(&file) {
+        Ok(data) => data,
+        Err(err) => {
+            set_last_error(format!("{}", err));
+            return FileDataReturn {
+                content: std::ptr::null_mut(),
+                err: err.get_code(),
+            };
+        }
+    };
+
+    let hash_str = format!("{}", HexSlice::new(&hash));
+    let c_str = CString::new(hash_str).unwrap();
+    FileDataReturn {
+        content: c_str.into_raw(),
+        err: 0,
+    }
 }
 
 #[no_mangle]

@@ -59,6 +59,13 @@ namespace WickDownloaderSharp
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal class FileDataReturn
+    {
+        public StringHandle hash;
+        public uint error;
+    }
+
     internal class RuntimeBindings
     {
         public delegate void InitializeDelegate(IntPtr a, uint err);
@@ -85,6 +92,9 @@ namespace WickDownloaderSharp
 
         [DllImport("wick_downloader.dll")]
         internal static extern void get_file_data(RuntimeHandle handle, PakHandle phandle, string file, DataRetrieveDelegate cb);
+
+        [DllImport("wick_downloader.dll")]
+        internal static extern FileDataReturn get_file_hash(PakHandle phandle, string file);
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle vec_string_get_next(VecStringHandle handle);
@@ -215,6 +225,19 @@ namespace WickDownloaderSharp
             var path = pathHandle.AsString();
             pathHandle.Dispose();
             return path;
+        }
+
+        public string GetFileHash(string file)
+        {
+            var fileData = RuntimeBindings.get_file_hash(handle, file);
+            if (fileData.error != 0)
+            {
+                throw new WickException(fileData.error, RuntimeBindings.GetLastError());
+            }
+            var hash = fileData.hash.AsString();
+            fileData.hash.Dispose();
+
+            return hash;
         }
 
         public void Dispose()
