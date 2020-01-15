@@ -69,6 +69,7 @@ namespace WickDownloaderSharp
     internal class RuntimeBindings
     {
         public delegate void InitializeDelegate(IntPtr a, uint err);
+        public delegate void EncryptedPakRetrieveDelegate(IntPtr pak, uint err);
         public delegate void PakRetrieveDelegate(IntPtr pakService, uint err);
         public delegate void DataRetrieveDelegate(IntPtr data, uint length, uint err);
 
@@ -82,7 +83,10 @@ namespace WickDownloaderSharp
         internal static extern VecStringHandle get_pak_names(RuntimeHandle handle);
 
         [DllImport("wick_downloader.dll")]
-        internal static extern void get_pak(RuntimeHandle handle, string file, string key, PakRetrieveDelegate cb);
+        internal static extern void get_pak(RuntimeHandle handle, string file, EncryptedPakRetrieveDelegate cb);
+
+        [DllImport("wick_downloader.dll")]
+        internal static extern void decrypt_pak(RuntimeHandle handle, EncryptedPakHandle pakhandle, string key, PakRetrieveDelegate cb);
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle get_pak_mount(PakHandle handle);
@@ -112,6 +116,9 @@ namespace WickDownloaderSharp
 
         [DllImport("wick_downloader.dll")]
         internal static extern void free_pak(IntPtr handle);
+
+        [DllImport("wick_downloader.dll")]
+        internal static extern void free_encrypted_pak(IntPtr handle);
 
         [DllImport("wick_downloader.dll")]
         internal static extern void free_vec_string(IntPtr handle);
@@ -152,6 +159,30 @@ namespace WickDownloaderSharp
         protected override bool ReleaseHandle()
         {
             RuntimeBindings.free_pak(handle);
+            return true;
+        }
+    }
+
+    internal class EncryptedPakHandle : SafeHandle
+    {
+        public EncryptedPakHandle(IntPtr ptr) : base (IntPtr.Zero, true)
+        {
+            handle = ptr;
+        }
+
+        public override bool IsInvalid
+        {
+            get { return handle == IntPtr.Zero; }
+        }
+
+        public void DestroyHandle()
+        {
+            handle = IntPtr.Zero;
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            RuntimeBindings.free_encrypted_pak(handle);
             return true;
         }
     }
@@ -197,6 +228,28 @@ namespace WickDownloaderSharp
             byte[] buffer = new byte[len];
             Marshal.Copy(handle, buffer, 0, buffer.Length);
             return Encoding.UTF8.GetString(buffer);
+        }
+    }
+
+    public class EncryptedPak : IDisposable
+    {
+        internal EncryptedPakHandle handle;
+        internal EncryptedPak(EncryptedPakHandle pakhandle)
+        {
+            handle = pakhandle;
+        }
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (handle != null && !handle.IsInvalid)
+            {
+                handle.Dispose();
+            }
         }
     }
 
@@ -300,7 +353,35 @@ namespace WickDownloaderSharp
             return taskPlace.Task;
         }
 
-        public Task<PakService> GetPakService(string file, string key)
+        public Task<EncryptedPak> GetPak(string file)
+        {
+            var taskPlace = new TaskCompletionSource<EncryptedPak>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var callbackHandle = default(GCHandle);
+            RuntimeBindings.EncryptedPakRetrieveDelegate nativeCallback = (a, err) =>
+            {
+                try
+                {
+                    if (err != 0)
+                    {
+                        taskPlace.SetException(new WickException(err, RuntimeBindings.GetLastError()));
+                        return;
+                    }
+                    taskPlace.SetResult(new EncryptedPak(new EncryptedPakHandle(a)));
+                }
+                finally
+                {
+                    if (callbackHandle.IsAllocated)
+                    {
+                        callbackHandle.Free();
+                    }
+                }
+            };
+            callbackHandle = GCHandle.Alloc(nativeCallback);
+            RuntimeBindings.get_pak(handle, file, nativeCallback);
+            return taskPlace.Task;
+        }
+
+        public Task<PakService> DecryptPak(EncryptedPak pak, string key)
         {
             var taskPlace = new TaskCompletionSource<PakService>(TaskCreationOptions.RunContinuationsAsynchronously);
             var callbackHandle = default(GCHandle);
@@ -324,7 +405,9 @@ namespace WickDownloaderSharp
                 }
             };
             callbackHandle = GCHandle.Alloc(nativeCallback);
-            RuntimeBindings.get_pak(handle, file, key, nativeCallback);
+            RuntimeBindings.decrypt_pak(handle, pak.handle, key, nativeCallback);
+            // pak.handle gets destroyed as soon as decrypt_pak is called, not async
+            pak.handle.DestroyHandle();
             return taskPlace.Task;
         }
 

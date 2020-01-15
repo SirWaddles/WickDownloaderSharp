@@ -1,6 +1,6 @@
 use tokio::runtime;
 use std::sync::{Arc, Mutex};
-use wickdl::{ServiceState, PakService};
+use wickdl::{ServiceState, EncryptedPak, PakService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -104,12 +104,46 @@ pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
 }
 
 #[no_mangle]
-pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *const c_char, cb: extern fn(pak: *mut PakService, err: u32)) {
+pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, cb: extern fn(pak: *mut EncryptedPak, err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
         &*ptr
     };
     let file = get_string(rfile);
+
+    let service = match &state.service {
+        Some(data) => Arc::clone(&data),
+        None => {
+            cb(std::ptr::null_mut(), 13);
+            return;
+        },
+    };
+
+    state.runtime.spawn(async move {
+        match service.get_pak(file).await {
+            Ok(pak) => {
+                cb(Box::into_raw(Box::new(pak)), 0);
+            },
+            Err(err) => {
+                set_last_error(format!("{}", err));
+                cb(std::ptr::null_mut(), err.get_code());
+            },
+        };
+    });
+}
+
+#[no_mangle]
+pub extern fn decrypt_pak(ptr: *mut DownloaderState, pakptr: *mut EncryptedPak, rkey: *const c_char, cb: extern fn(pak: *mut PakService, err: u32)) {
+    let state = unsafe {
+        assert!(!ptr.is_null());
+        &*ptr
+    };
+
+    let pak = unsafe {
+        assert!(!pakptr.is_null());
+        Box::from_raw(pakptr)
+    };
+
     let key = get_string(rkey);
 
     let service = match &state.service {
@@ -121,9 +155,9 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, rkey: *co
     };
 
     state.runtime.spawn(async move {
-        match service.get_pak(file, key).await {
-            Ok(pak) => {
-                cb(Box::into_raw(Box::new(pak)), 0);
+        match service.decrypt_pak(*pak, key).await {
+            Ok(data) => {
+                cb(Box::into_raw(Box::new(data)), 0);
             },
             Err(err) => {
                 set_last_error(format!("{}", err));
@@ -247,6 +281,12 @@ pub extern fn vec_string_get_next(ptr: *mut VecStringHead) -> *mut c_char {
 
 #[no_mangle]
 pub extern fn free_pak(ptr: *mut PakService) {
+    if ptr.is_null() { return; }
+    unsafe { Box::from_raw(ptr); }
+}
+
+#[no_mangle]
+pub extern fn free_encrypted_pak(ptr: *mut EncryptedPak) {
     if ptr.is_null() { return; }
     unsafe { Box::from_raw(ptr); }
 }
