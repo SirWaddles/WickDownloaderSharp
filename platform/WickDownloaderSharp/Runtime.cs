@@ -329,14 +329,14 @@ namespace WickDownloaderSharp
 
         public Runtime(string app_manifest, string chunk_manifest)
         {
-            RuntimeBindings.InitializeDelegate cb = (service, err) =>
+            void cb(IntPtr service, uint err)
             {
                 if (err != 0)
                 {
                     throw new WickException(err, RuntimeBindings.GetLastError());
                 }
                 handle = new RuntimeHandle(service);
-            };
+            }
             RuntimeBindings.initialize_with_manifest(app_manifest, chunk_manifest, cb);
             
         }
