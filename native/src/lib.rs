@@ -41,7 +41,6 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
     let rt = Arc::new(runtime::Builder::new()
         .enable_all()
         .threaded_scheduler()
-        .core_threads(4)
         .build()
         .unwrap());
 
@@ -63,6 +62,34 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
             },
         };
     });
+}
+
+#[no_mangle]
+pub extern fn initialize_with_manifest(app_manifest: *const c_char, chunk_manifest: *const c_char, cb: extern fn(state: *mut DownloaderState, err: u32)) {
+    let rt = Arc::new(runtime::Builder::new()
+        .enable_all()
+        .threaded_scheduler()
+        .build()
+        .unwrap());
+
+    let app_manifest = get_string(app_manifest);
+    let chunk_manifest = get_string(chunk_manifest);
+
+    let service = match ServiceState::from_manifests(&app_manifest, &chunk_manifest) {
+        Ok(res) => res,
+        Err(err) => {
+            set_last_error(format!("{}", err));
+            cb(std::ptr::null_mut(), err.get_code());
+            return;
+        }
+    };
+
+    let state = DownloaderState {
+        runtime: rt,
+        service: Some(Arc::new(service)),
+    };
+
+    cb(Box::into_raw(Box::new(state)), 0);
 }
 
 fn set_last_error(err: String) {
