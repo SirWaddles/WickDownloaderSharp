@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <Platforms>AnyCPU;x64</Platforms>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>0.1.0</Version>
+    <PackageId>WickDownloader</PackageId>
+    <Authors>Waddlesworth</Authors>
+    <Company />
+    <Product>WickDownloader</Product>
+    <Description>An asynchronous partial EGS downloader.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/SirWaddles/WickDownloaderSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SirWaddles/WickDownloaderSharp</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
+    <AssemblyName>WickDownloader</AssemblyName>
+    <RootNamespace>WickDownloader</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)../native/target/release/wick_downloader.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>.dll</Link>
+      <Visible>false</Visible>
+    </Content>
+  </ItemGroup>
+
+</Project>

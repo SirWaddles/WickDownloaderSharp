@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Text;
 
-namespace WickDownloaderSharp
+namespace WickDownloader
 {
     public class WickException : Exception
     {

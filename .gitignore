@@ -1,9 +1,5 @@
 native/target
 **/*.rs.bk
 platform/.vs
-platform/DownloaderTest/.vs
-platform/DownloaderTest/bin/
-platform/DownloaderTest/obj/
-platform/WickDownloaderSharp/.vs
-platform/WickDownloaderSharp/bin/
-platform/WickDownloaderSharp/obj/
+platform/bin/
+platform/obj/
