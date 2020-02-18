@@ -1,5 +1,6 @@
 native/target
 **/*.rs.bk
+platform/runtimes/
 platform/.vs
 platform/bin/
 platform/obj/

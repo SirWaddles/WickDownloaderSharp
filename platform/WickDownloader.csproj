@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.0</TargetFramework>
-    <Platforms>AnyCPU;x64</Platforms>
+    <Platforms>x86;x64</Platforms>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <PackageId>WickDownloader</PackageId>
     <Authors>Waddlesworth</Authors>
     <Company />
@@ -19,10 +19,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="$(MSBuildThisFileDirectory)../native/target/release/wick_downloader.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>.dll</Link>
-      <Visible>false</Visible>
+    <Content Include="runtimes/win10-x64/native/wick_downloader.dll" Link="runtimes/win10-x64/native/wick_downloader.dll">
+      <PackagePath>runtimes/win10-x64/native</PackagePath>
+    </Content>
+	<Content Include="runtimes/win10-x86/native/wick_downloader.dll" Link="runtimes/win10-x86/native/wick_downloader.dll">
+      <PackagePath>runtimes/win10-x86/native</PackagePath>
     </Content>
   </ItemGroup>
 
