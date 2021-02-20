@@ -9,7 +9,7 @@ name = "wick_downloader"
 crate-type = ["cdylib"]
 
 [dependencies]
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 wickdl = { git = "https://github.com/SirWaddles/WickDownloader" }
 libc = "0.2"
 lazy_static = "1.4"

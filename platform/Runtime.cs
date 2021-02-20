@@ -69,9 +69,9 @@ namespace WickDownloader
     internal class RuntimeBindings
     {
         public delegate void InitializeDelegate(IntPtr a, uint err);
-        public delegate void EncryptedPakRetrieveDelegate(IntPtr pak, uint err);
         public delegate void PakRetrieveDelegate(IntPtr pakService, uint err);
         public delegate void DataRetrieveDelegate(IntPtr data, uint length, uint err);
+        public delegate void VoidReturnDelegate(uint err);
 
         [DllImport("wick_downloader.dll")]
         internal static extern void initialize(InitializeDelegate a);
@@ -86,10 +86,10 @@ namespace WickDownloader
         internal static extern VecStringHandle get_pak_names(RuntimeHandle handle);
 
         [DllImport("wick_downloader.dll")]
-        internal static extern void get_pak(RuntimeHandle handle, string file, EncryptedPakRetrieveDelegate cb);
+        internal static extern void get_pak(RuntimeHandle handle, string file, PakRetrieveDelegate cb);
 
         [DllImport("wick_downloader.dll")]
-        internal static extern void decrypt_pak(RuntimeHandle handle, EncryptedPakHandle pakhandle, string key, PakRetrieveDelegate cb);
+        internal static extern void download_file(RuntimeHandle handle, string pak, string file, VoidReturnDelegate cb);
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle get_pak_mount(PakHandle handle);
@@ -99,9 +99,6 @@ namespace WickDownloader
 
         [DllImport("wick_downloader.dll")]
         internal static extern void get_file_data(RuntimeHandle handle, PakHandle phandle, string file, DataRetrieveDelegate cb);
-
-        [DllImport("wick_downloader.dll")]
-        internal static extern void get_file_hash(PakHandle handle, string file, FileDataReturn result);
 
         [DllImport("wick_downloader.dll")]
         internal static extern StringHandle vec_string_get_next(VecStringHandle handle);
@@ -166,30 +163,6 @@ namespace WickDownloader
         }
     }
 
-    internal class EncryptedPakHandle : SafeHandle
-    {
-        public EncryptedPakHandle(IntPtr ptr) : base (IntPtr.Zero, true)
-        {
-            handle = ptr;
-        }
-
-        public override bool IsInvalid
-        {
-            get { return handle == IntPtr.Zero; }
-        }
-
-        public void DestroyHandle()
-        {
-            handle = IntPtr.Zero;
-        }
-
-        protected override bool ReleaseHandle()
-        {
-            RuntimeBindings.free_encrypted_pak(handle);
-            return true;
-        }
-    }
-
     internal class VecStringHandle : SafeHandle
     {
         public VecStringHandle() : base(IntPtr.Zero, true) { }
@@ -234,28 +207,6 @@ namespace WickDownloader
         }
     }
 
-    public class EncryptedPak : IDisposable
-    {
-        internal EncryptedPakHandle handle;
-        internal EncryptedPak(EncryptedPakHandle pakhandle)
-        {
-            handle = pakhandle;
-        }
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (handle != null && !handle.IsInvalid)
-            {
-                handle.Dispose();
-            }
-        }
-    }
-
     public class PakService : IDisposable
     {
         internal PakHandle handle;
@@ -287,22 +238,6 @@ namespace WickDownloader
             var path = pathHandle.AsString();
             pathHandle.Dispose();
             return path;
-        }
-
-        public string GetFileHash(string file)
-        {
-            var fileData = new FileDataReturn();
-            RuntimeBindings.get_file_hash(handle, file, fileData);
-            if (fileData.error != 0)
-            {
-                Console.WriteLine(fileData.error);
-                throw new WickException(fileData.error, RuntimeBindings.GetLastError());
-            }
-            var hashHandle = new StringHandle(fileData.hash);
-            var hash = hashHandle.AsString();
-            hashHandle.Dispose();
-
-            return hash;
         }
 
         public void Dispose()
@@ -370,35 +305,7 @@ namespace WickDownloader
             return taskPlace.Task;
         }
 
-        public Task<EncryptedPak> GetPak(string file)
-        {
-            var taskPlace = new TaskCompletionSource<EncryptedPak>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var callbackHandle = default(GCHandle);
-            RuntimeBindings.EncryptedPakRetrieveDelegate nativeCallback = (a, err) =>
-            {
-                try
-                {
-                    if (err != 0)
-                    {
-                        taskPlace.SetException(new WickException(err, RuntimeBindings.GetLastError()));
-                        return;
-                    }
-                    taskPlace.SetResult(new EncryptedPak(new EncryptedPakHandle(a)));
-                }
-                finally
-                {
-                    if (callbackHandle.IsAllocated)
-                    {
-                        callbackHandle.Free();
-                    }
-                }
-            };
-            callbackHandle = GCHandle.Alloc(nativeCallback);
-            RuntimeBindings.get_pak(handle, file, nativeCallback);
-            return taskPlace.Task;
-        }
-
-        public Task<PakService> DecryptPak(EncryptedPak pak, string key)
+        public Task<PakService> GetPak(string file)
         {
             var taskPlace = new TaskCompletionSource<PakService>(TaskCreationOptions.RunContinuationsAsynchronously);
             var callbackHandle = default(GCHandle);
@@ -422,9 +329,35 @@ namespace WickDownloader
                 }
             };
             callbackHandle = GCHandle.Alloc(nativeCallback);
-            RuntimeBindings.decrypt_pak(handle, pak.handle, key, nativeCallback);
-            // pak.handle gets destroyed as soon as decrypt_pak is called, not async
-            pak.handle.DestroyHandle();
+            RuntimeBindings.get_pak(handle, file, nativeCallback);
+            return taskPlace.Task;
+        }
+
+        public Task<bool> DownloadFile(string pak, string file)
+        {
+            var taskPlace = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var callbackHandle = default(GCHandle);
+            RuntimeBindings.VoidReturnDelegate nativeCallback = (err) =>
+            {
+                try
+                {
+                    if (err != 0)
+                    {
+                        taskPlace.SetException(new WickException(err, RuntimeBindings.GetLastError()));
+                        return;
+                    }
+                    taskPlace.SetResult(true);
+                }
+                finally
+                {
+                    if (callbackHandle.IsAllocated)
+                    {
+                        callbackHandle.Free();
+                    }
+                }
+            };
+            callbackHandle = GCHandle.Alloc(nativeCallback);
+            RuntimeBindings.download_file(handle, pak, file, nativeCallback);
             return taskPlace.Task;
         }
 

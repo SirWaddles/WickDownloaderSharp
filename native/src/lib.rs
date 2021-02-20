@@ -1,6 +1,6 @@
 use tokio::runtime;
 use std::sync::{Arc, Mutex};
-use wickdl::{ServiceState, EncryptedPak, PakService};
+use wickdl::{ServiceState, UtocService};
 use libc::{c_char};
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -38,9 +38,8 @@ impl<'a> fmt::Display for HexSlice<'a> {
 
 #[no_mangle]
 pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
-    let rt = Arc::new(runtime::Builder::new()
+    let rt = Arc::new(runtime::Builder::new_multi_thread()
         .enable_all()
-        .threaded_scheduler()
         .build()
         .unwrap());
 
@@ -66,9 +65,8 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
 
 #[no_mangle]
 pub extern fn initialize_with_manifest(app_manifest: *const c_char, chunk_manifest: *const c_char, cb: extern fn(state: *mut DownloaderState, err: u32)) {
-    let rt = Arc::new(runtime::Builder::new()
+    let rt = Arc::new(runtime::Builder::new_multi_thread()
         .enable_all()
-        .threaded_scheduler()
         .build()
         .unwrap());
 
@@ -131,7 +129,7 @@ pub extern fn get_pak_names(ptr: *mut DownloaderState) -> *mut VecStringHead {
 }
 
 #[no_mangle]
-pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, cb: extern fn(pak: *mut EncryptedPak, err: u32)) {
+pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, cb: extern fn(pak: *mut UtocService, err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
         &*ptr
@@ -147,7 +145,7 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, cb: exter
     };
 
     state.runtime.spawn(async move {
-        match service.get_pak(file).await {
+        match service.get_utoc(&file).await {
             Ok(pak) => {
                 cb(Box::into_raw(Box::new(pak)), 0);
             },
@@ -160,42 +158,36 @@ pub extern fn get_pak(ptr: *mut DownloaderState, rfile: *const c_char, cb: exter
 }
 
 #[no_mangle]
-pub extern fn decrypt_pak(ptr: *mut DownloaderState, pakptr: *mut EncryptedPak, rkey: *const c_char, cb: extern fn(pak: *mut PakService, err: u32)) {
+pub extern fn download_file(ptr: *mut DownloaderState, rpak: *const c_char, rfile: *const c_char, cb: extern fn(err: u32)) {
     let state = unsafe {
         assert!(!ptr.is_null());
         &*ptr
     };
-
-    let pak = unsafe {
-        assert!(!pakptr.is_null());
-        Box::from_raw(pakptr)
-    };
-
-    let key = get_string(rkey);
+    let pak = get_string(rpak);
+    let file = get_string(rfile);
 
     let service = match &state.service {
         Some(data) => Arc::clone(&data),
         None => {
-            cb(std::ptr::null_mut(), 13);
+            cb(13);
             return;
         },
     };
 
     state.runtime.spawn(async move {
-        match service.decrypt_pak(*pak, key).await {
-            Ok(data) => {
-                cb(Box::into_raw(Box::new(data)), 0);
+        match service.download_file(pak, file).await {
+            Ok(_) => cb(0),
+            Err(e) => {
+                set_last_error(format!("Error: {}", e));
+                cb(14);
+                return;
             },
-            Err(err) => {
-                set_last_error(format!("{}", err));
-                cb(std::ptr::null_mut(), err.get_code());
-            },
-        };
+        }
     });
 }
 
 #[no_mangle]
-pub extern fn get_pak_mount(ptr: *mut PakService) -> *mut c_char {
+pub extern fn get_pak_mount(ptr: *mut UtocService) -> *mut c_char {
     let pak = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
@@ -206,14 +198,14 @@ pub extern fn get_pak_mount(ptr: *mut PakService) -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern fn get_file_names(ptr: *mut PakService) -> *mut VecStringHead {
+pub extern fn get_file_names(ptr: *mut UtocService) -> *mut VecStringHead {
     let pak = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
 
     Box::into_raw(Box::new(VecStringHead {
-        contents: pak.get_files(),
+        contents: pak.get_file_list().clone(),
         index: 0,
     }))
 }
@@ -225,36 +217,7 @@ pub struct FileDataReturn {
 }
 
 #[no_mangle]
-pub extern fn get_file_hash(ptr: *mut PakService, rfile: *const c_char, rdata: *mut FileDataReturn) {
-    let pak = unsafe {
-        assert!(!ptr.is_null());
-        &mut *ptr
-    };
-
-    let data = unsafe {
-        assert!(!rdata.is_null());
-        &mut *rdata
-    };
-    let file = get_string(rfile);
-    
-    let hash = match pak.get_hash(&file) {
-        Ok(data) => data,
-        Err(err) => {
-            set_last_error(format!("{}", err));
-            data.content = std::ptr::null_mut();
-            data.err = err.get_code();
-            return;
-        }
-    };
-
-    let hash_str = format!("{}", HexSlice::new(&hash));
-    let c_str = CString::new(hash_str).unwrap();
-    data.content = c_str.into_raw();
-    data.err = 0;
-}
-
-#[no_mangle]
-pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService, rfile: *const c_char, cb: extern fn (data: *mut u8, length: u32, err: u32)) {
+pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut UtocService, rfile: *const c_char, cb: extern fn (data: *mut u8, length: u32, err: u32)) {
     let state = unsafe {
         assert!(!rtptr.is_null());
         &mut *rtptr
@@ -266,7 +229,7 @@ pub extern fn get_file_data(rtptr: *mut DownloaderState, pakptr: *mut PakService
     let file = get_string(rfile);
 
     state.runtime.spawn(async move {
-        match pak.get_data(&file).await {
+        match pak.get_file(&file).await {
             Ok(mut data) => {
                 cb(data.as_mut_ptr(), data.len() as u32, 0);
             },
@@ -307,13 +270,7 @@ pub extern fn vec_string_get_next(ptr: *mut VecStringHead) -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern fn free_pak(ptr: *mut PakService) {
-    if ptr.is_null() { return; }
-    unsafe { Box::from_raw(ptr); }
-}
-
-#[no_mangle]
-pub extern fn free_encrypted_pak(ptr: *mut EncryptedPak) {
+pub extern fn free_pak(ptr: *mut UtocService) {
     if ptr.is_null() { return; }
     unsafe { Box::from_raw(ptr); }
 }
