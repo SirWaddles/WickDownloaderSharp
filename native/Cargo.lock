@@ -414,9 +414,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b67e66362108efccd8ac053abafc8b7a8d86a37e6e48fc4f6f7485eb5e9e6a5"
+checksum = "d832b01df74254fe364568d6ddc294443f61cbec82816b60904303af87efae78"
 dependencies = [
  "bytes 1.0.1",
  "fnv",
@@ -429,7 +429,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-futures",
 ]
 
 [[package]]
@@ -570,7 +569,7 @@ checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 [[package]]
 name = "john-wick-parse"
 version = "6.0.1"
-source = "git+https://github.com/SirWaddles/JohnWickParse#d6ed217eb27e91574e5834bf3a76e276c4375f47"
+source = "git+https://github.com/SirWaddles/JohnWickParse#8c653ac42bfba00b3c9e71c5a9c37e8f2b8b31ec"
 dependencies = [
  "aes-soft",
  "bit-vec",
@@ -1244,9 +1243,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.63"
+version = "1.0.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43535db9747a4ba938c0ce0a98cc631a46ebf943c9e1d604e091df6007620bf6"
+checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
 dependencies = [
  "itoa",
  "ryu",
@@ -1422,16 +1421,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-futures"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
-dependencies = [
- "pin-project",
- "tracing",
-]
-
-[[package]]
 name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1496,7 +1485,7 @@ dependencies = [
 [[package]]
 name = "wickdl"
 version = "0.3.0"
-source = "git+https://github.com/SirWaddles/WickDownloader#63f0c58f56183d91dcbf07778503452ab26746cf"
+source = "git+https://github.com/SirWaddles/WickDownloader#5662d72fc5dc2d55fe5eef787c19b7d15ce51b1f"
 dependencies = [
  "byteorder",
  "bytes 0.5.6",

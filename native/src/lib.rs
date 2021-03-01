@@ -210,6 +210,19 @@ pub extern fn get_file_names(ptr: *mut UtocService) -> *mut VecStringHead {
     }))
 }
 
+#[no_mangle]
+pub extern fn get_id_list(ptr: *mut UtocService) -> *mut VecStringHead {
+    let pak = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    Box::into_raw(Box::new(VecStringHead {
+        contents: pak.get_id_list(),
+        index: 0,
+    }))
+}
+
 #[repr(C)]
 pub struct FileDataReturn {
     pub content: *mut c_char,

@@ -98,6 +98,9 @@ namespace WickDownloader
         internal static extern VecStringHandle get_file_names(PakHandle handle);
 
         [DllImport("wick_downloader.dll")]
+        internal static extern VecStringHandle get_id_list(PakHandle handle);
+
+        [DllImport("wick_downloader.dll")]
         internal static extern void get_file_data(RuntimeHandle handle, PakHandle phandle, string file, DataRetrieveDelegate cb);
 
         [DllImport("wick_downloader.dll")]
@@ -176,6 +179,20 @@ namespace WickDownloader
             RuntimeBindings.free_vec_string(handle);
             return true;
         }
+
+        public static List<String> GetStrings(VecStringHandle handle) {
+            StringHandle testHandle = RuntimeBindings.vec_string_get_next(handle);
+            var names = new List<string>();
+            while (!testHandle.IsInvalid)
+            {
+                names.Add(testHandle.AsString());
+                testHandle.Dispose();
+                testHandle = RuntimeBindings.vec_string_get_next(handle);
+            }
+
+            handle.Dispose();
+            return names;
+        }
     }
 
     internal class StringHandle : SafeHandle
@@ -219,17 +236,13 @@ namespace WickDownloader
         public List<string> GetFileNames()
         {
             VecStringHandle namehandle = RuntimeBindings.get_file_names(handle);
-            StringHandle testHandle = RuntimeBindings.vec_string_get_next(namehandle);
-            var names = new List<string>();
-            while (!testHandle.IsInvalid)
-            {
-                names.Add(testHandle.AsString());
-                testHandle.Dispose();
-                testHandle = RuntimeBindings.vec_string_get_next(namehandle);
-            }
+            return VecStringHandle.GetStrings(namehandle);
+        }
 
-            namehandle.Dispose();
-            return names;
+        public List<string> GetIdList()
+        {
+            VecStringHandle idhandle = RuntimeBindings.get_id_list(handle);
+            return VecStringHandle.GetStrings(idhandle);
         }
 
         public string GetMountPath()
