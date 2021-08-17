@@ -4,3 +4,5 @@ platform/runtimes/
 platform/.vs
 platform/bin/
 platform/obj/
+.vs/
+DownloaderTest/

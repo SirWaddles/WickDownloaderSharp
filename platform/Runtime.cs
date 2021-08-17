@@ -77,7 +77,7 @@ namespace WickDownloader
         internal static extern void initialize(InitializeDelegate a);
 
         [DllImport("wick_downloader.dll")]
-        internal static extern void initialize_with_manifest(string app_manifest, string chunk_manifest, InitializeDelegate cb);
+        internal static extern void initialize_with_manifest(string app_manifest, IntPtr chunk_manifest, int chunk_manifest_length, InitializeDelegate cb);
 
         [DllImport("wick_downloader.dll")]
         internal static extern void destroy(IntPtr handle);
@@ -275,7 +275,7 @@ namespace WickDownloader
             handle = runtime;
         }
 
-        public Runtime(string app_manifest, string chunk_manifest)
+        public Runtime(string app_manifest, byte[] chunk_manifest)
         {
             void cb(IntPtr service, uint err)
             {
@@ -285,8 +285,13 @@ namespace WickDownloader
                 }
                 handle = new RuntimeHandle(service);
             }
-            RuntimeBindings.initialize_with_manifest(app_manifest, chunk_manifest, cb);
-            
+            unsafe
+            {
+                fixed (byte* uBuffer = chunk_manifest)
+                {
+                    RuntimeBindings.initialize_with_manifest(app_manifest, (IntPtr)uBuffer, chunk_manifest.Length, cb);
+                }
+            }
         }
 
         public static Task<Runtime> Initialize()

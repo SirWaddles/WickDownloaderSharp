@@ -64,16 +64,19 @@ pub extern fn initialize(cb: extern fn(state: *mut DownloaderState, err: u32)) {
 }
 
 #[no_mangle]
-pub extern fn initialize_with_manifest(app_manifest: *const c_char, chunk_manifest: *const c_char, cb: extern fn(state: *mut DownloaderState, err: u32)) {
+pub extern fn initialize_with_manifest(app_manifest: *const c_char, chunk_manifest: *const u8, chunk_manifest_length: usize, cb: extern fn(state: *mut DownloaderState, err: u32)) {
     let rt = Arc::new(runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap());
 
     let app_manifest = get_string(app_manifest);
-    let chunk_manifest = get_string(chunk_manifest);
 
-    let service = match ServiceState::from_manifests(&app_manifest, &chunk_manifest) {
+    let chunk_manifest_data = unsafe {
+        std::slice::from_raw_parts(chunk_manifest, chunk_manifest_length)
+    };
+
+    let service = match ServiceState::from_manifests(&app_manifest, &chunk_manifest_data) {
         Ok(res) => res,
         Err(err) => {
             set_last_error(format!("{}", err));
